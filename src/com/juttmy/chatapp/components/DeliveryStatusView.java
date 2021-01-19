@@ -1,0 +1,108 @@
+package com.juttmy.chatapp.components;
+
+import android.util.Log;
+import android.view.View;
+import android.view.animation.Animation;
+import android.view.animation.LinearInterpolator;
+import android.view.animation.RotateAnimation;
+import android.widget.ImageView;
+
+import com.juttmy.chatapp.R;
+
+public class DeliveryStatusView {
+
+  private final ImageView deliveryIndicator;
+  private static RotateAnimation prepareAnimation;
+  private static RotateAnimation sendingAnimation;
+  private boolean animated;
+
+  public DeliveryStatusView(ImageView deliveryIndicator) {
+    this.deliveryIndicator = deliveryIndicator;
+  }
+
+  private void animatePrepare()
+  {
+    if(prepareAnimation ==null) {
+      prepareAnimation = new RotateAnimation(360f, 0f,
+          Animation.RELATIVE_TO_SELF, 0.5f,
+          Animation.RELATIVE_TO_SELF, 0.5f);
+      prepareAnimation.setInterpolator(new LinearInterpolator());
+      prepareAnimation.setDuration(2500);
+      prepareAnimation.setRepeatCount(Animation.INFINITE);
+    }
+
+    deliveryIndicator.startAnimation(prepareAnimation);
+    animated = true;
+  }
+
+  private void animateSending()
+  {
+    if(sendingAnimation ==null) {
+      sendingAnimation = new RotateAnimation(0, 360f,
+          Animation.RELATIVE_TO_SELF, 0.5f,
+          Animation.RELATIVE_TO_SELF, 0.5f);
+      sendingAnimation.setInterpolator(new LinearInterpolator());
+      sendingAnimation.setDuration(1500);
+      sendingAnimation.setRepeatCount(Animation.INFINITE);
+    }
+
+    deliveryIndicator.startAnimation(sendingAnimation);
+    animated = true;
+  }
+
+  private void clearAnimation()
+  {
+    if(animated) {
+      deliveryIndicator.clearAnimation();
+      animated = false;
+    }
+  }
+
+  public void setNone() {
+    deliveryIndicator.setVisibility(View.GONE);
+    deliveryIndicator.clearAnimation();
+  }
+
+  public void setPreparing() {
+    deliveryIndicator.setVisibility(View.VISIBLE);
+    deliveryIndicator.setImageResource(R.drawable.ic_delivery_status_sending);
+    animatePrepare();
+  }
+
+  public void setPending() {
+    deliveryIndicator.setVisibility(View.VISIBLE);
+    deliveryIndicator.setImageResource(R.drawable.ic_delivery_status_sending);
+    animateSending();
+  }
+
+  public void setSent() {
+    deliveryIndicator.setVisibility(View.VISIBLE);
+    deliveryIndicator.setImageResource(R.drawable.ic_delivery_status_sent);
+    clearAnimation();
+  }
+
+  public void setRead() {
+    deliveryIndicator.setVisibility(View.VISIBLE);
+    deliveryIndicator.setImageResource(R.drawable.ic_delivery_status_read);
+    clearAnimation();
+  }
+
+  public void setFailed() {
+    deliveryIndicator.setVisibility(View.VISIBLE);
+    deliveryIndicator.setImageResource(R.drawable.ic_delivery_status_failed);
+    clearAnimation();
+  }
+
+  public void setTint(Integer color) {
+    if (color != null) {
+      deliveryIndicator.setColorFilter(color);
+    } else {
+      Log.w("dbg", "reset tint, color " + color);
+      resetTint();
+    }
+  }
+
+  public void resetTint() {
+    deliveryIndicator.setColorFilter(null);
+  }
+}

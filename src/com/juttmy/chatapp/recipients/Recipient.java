@@ -1,0 +1,297 @@
+/*
+ * Copyright (C) 2011 Whisper Systems
+ * Copyright (C) 2013 - 2017 Open Whisper Systems
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+package com.juttmy.chatapp.recipients;
+
+import android.content.Context;
+import android.graphics.Color;
+import android.graphics.drawable.Drawable;
+import android.net.Uri;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import android.text.TextUtils;
+
+import com.b44t.messenger.DcChat;
+import com.b44t.messenger.DcContact;
+import com.b44t.messenger.DcContext;
+
+import com.juttmy.chatapp.connect.ApplicationDcContext;
+import com.juttmy.chatapp.connect.DcHelper;
+import com.juttmy.chatapp.contacts.avatars.ContactPhoto;
+import com.juttmy.chatapp.contacts.avatars.FallbackContactPhoto;
+import com.juttmy.chatapp.contacts.avatars.GeneratedContactPhoto;
+import com.juttmy.chatapp.contacts.avatars.GroupRecordContactPhoto;
+import com.juttmy.chatapp.contacts.avatars.LocalFileContactPhoto;
+import com.juttmy.chatapp.contacts.avatars.ProfileContactPhoto;
+import com.juttmy.chatapp.contacts.avatars.SystemContactPhoto;
+import com.juttmy.chatapp.database.Address;
+import com.juttmy.chatapp.util.Hash;
+import com.juttmy.chatapp.util.Prefs;
+import com.juttmy.chatapp.util.Util;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
+
+public class Recipient {
+
+  private final Set<RecipientModifiedListener> listeners = Collections.newSetFromMap(new WeakHashMap<RecipientModifiedListener, Boolean>());
+
+  private final @NonNull Address address;
+
+  private @Nullable String  customLabel;
+
+  private @Nullable Uri                  systemContactPhoto;
+  private           Uri                  contactUri;
+
+  private @Nullable String         profileName;
+  private @Nullable String         profileAvatar;
+
+  // either dcChat or dcContact are set
+  private @Nullable DcChat dcChat;
+  private @Nullable DcContact dcContact;
+
+  public static @NonNull Recipient fromChat(@NonNull Context context, int dcMsgId) {
+    ApplicationDcContext dcContext = DcHelper.getContext(context);
+    return fromChat(dcContext, dcMsgId);
+  }
+
+  public static @NonNull Recipient fromChat (@NonNull ApplicationDcContext dcContext, int dcMsgId) {
+    return dcContext.getRecipient(dcContext.getChat(dcContext.getMsg(dcMsgId).getChatId()));
+  }
+
+  @SuppressWarnings("ConstantConditions")
+  public static @NonNull Recipient from(@NonNull Context context, @NonNull Address address) {
+    if (address == null) throw new AssertionError(address);
+    ApplicationDcContext dcContext = DcHelper.getContext(context);
+    if(address.isDcContact()) {
+      return dcContext.getRecipient(dcContext.getContact(address.getDcContactId()));
+    } else if (address.isDcChat()) {
+      return dcContext.getRecipient(dcContext.getChat(address.getDcChatId()));
+    }
+    else if(address.isEmail()) {
+      int contactId = dcContext.lookupContactIdByAddr(address.toEmailString());
+      if(contactId!=0) {
+        return dcContext.getRecipient(dcContext.getContact(contactId));
+      }
+    }
+    return dcContext.getRecipient(dcContext.getContact(0));
+  }
+
+  public Recipient(@NonNull Context context, @Nullable DcChat dcChat, @Nullable DcContact dcContact) {
+    this.dcChat                = dcChat;
+    this.dcContact             = dcContact;
+    this.contactUri            = null;
+    this.systemContactPhoto    = null;
+    this.customLabel           = null;
+    this.profileName           = null;
+    this.profileAvatar         = null;
+
+    if(dcContact!=null) {
+      this.address = Address.fromContact(dcContact.getId());
+      maybeSetSystemContactPhoto(context, dcContact);
+      if (dcContact.getId() == DcContact.DC_CONTACT_ID_SELF) {
+        setProfileAvatar("SELF");
+      }
+    }
+    else if(dcChat!=null) {
+      int chatId = dcChat.getId();
+      this.address = Address.fromChat(chatId);
+      if (!dcChat.isGroup()) {
+        DcContext dcContext = DcHelper.getContext(context);
+        int[] contacts = dcContext.getChatContacts(chatId);
+        if( contacts.length>=1 ) {
+          maybeSetSystemContactPhoto(context, dcContext.getContact(contacts[0]));
+        }
+      }
+    }
+    else {
+      this.address = Address.UNKNOWN;
+    }
+  }
+
+  public @Nullable String getName() {
+    if(dcChat!=null) {
+      return dcChat.getName();
+    }
+    else if(dcContact!=null) {
+      return dcContact.getDisplayName();
+    }
+    return "";
+  }
+
+  public @Nullable DcContact getDcContact() {
+    return dcContact;
+  }
+
+  public @NonNull Address getAddress() {
+    return address;
+  }
+
+  public @Nullable String getProfileName() {
+    return profileName;
+  }
+
+  public void setProfileAvatar(@Nullable String profileAvatar) {
+    synchronized (this) {
+      this.profileAvatar = profileAvatar;
+    }
+
+    notifyListeners();
+  }
+
+  public boolean isGroupRecipient() {
+    return dcChat!=null && dcChat.isGroup();
+  }
+
+  public @NonNull List<Recipient> loadParticipants(Context context) {
+    List<Recipient> participants = new ArrayList<>();
+    if (dcChat!=null) {
+      ApplicationDcContext dcContext = DcHelper.getContext(context);
+      int[] contactIds = dcContext.getChatContacts(dcChat.getId());
+      for (int contactId : contactIds) {
+        participants.add(dcContext.getRecipient(ApplicationDcContext.RECIPIENT_TYPE_CONTACT, contactId));
+      }
+    }
+    return participants;
+  }
+
+  public synchronized void addListener(RecipientModifiedListener listener) {
+    listeners.add(listener);
+  }
+
+  public synchronized void removeListener(RecipientModifiedListener listener) {
+    listeners.remove(listener);
+  }
+
+  public synchronized String toShortString() {
+    return getName();
+  }
+
+  public int getFallbackAvatarColor() {
+    int rgb = 0x00808080;
+    if(dcContact!=null) {
+      rgb = dcContact.getColor();
+    }
+    else if(dcChat!=null){
+      rgb = dcChat.getColor();
+    }
+    int argb = Color.argb(0xFF, Color.red(rgb), Color.green(rgb), Color.blue(rgb));
+    return argb;
+  }
+
+  public synchronized @NonNull Drawable getFallbackAvatarDrawable(Context context) {
+    return getFallbackContactPhoto().asDrawable(context, getFallbackAvatarColor());
+  }
+
+  public synchronized @NonNull FallbackContactPhoto getFallbackContactPhoto() {
+    String name = getName();
+         if (!TextUtils.isEmpty(name)) return new GeneratedContactPhoto(name);
+    else                               return new GeneratedContactPhoto("#");
+  }
+
+  public synchronized @Nullable ContactPhoto getContactPhoto(Context context) {
+    LocalFileContactPhoto contactPhoto = null;
+    if (dcChat!=null) {
+      contactPhoto = new GroupRecordContactPhoto(context, address, dcChat);
+    }
+    else if (dcContact!=null) {
+       contactPhoto = new ProfileContactPhoto(context, address, dcContact);
+    }
+
+    if (contactPhoto!=null) {
+      String path = contactPhoto.getPath(context);
+      if (path != null && !path.isEmpty()) {
+        return contactPhoto;
+      }
+    }
+
+    if (systemContactPhoto != null) {
+      return new SystemContactPhoto(address, systemContactPhoto, 0);
+    }
+
+    return null;
+  }
+
+  private void maybeSetSystemContactPhoto(@NonNull Context context, DcContact contact) {
+    String identifier = Hash.sha256(contact.getDisplayName() + contact.getAddr());
+    Uri systemContactPhoto = Prefs.getSystemContactPhoto(context, identifier);
+    if (systemContactPhoto != null) {
+      setSystemContactPhoto(systemContactPhoto);
+    }
+  }
+
+  private void setSystemContactPhoto(@Nullable Uri systemContactPhoto) {
+    boolean notify = false;
+
+    synchronized (this) {
+      if (!Util.equals(systemContactPhoto, this.systemContactPhoto)) {
+        this.systemContactPhoto = systemContactPhoto;
+        notify = true;
+      }
+    }
+
+    if (notify) notifyListeners();
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || !(o instanceof Recipient)) return false;
+
+    Recipient that = (Recipient) o;
+
+    return this.address.equals(that.address);
+  }
+
+  @Override
+  public int hashCode() {
+    return this.address.hashCode();
+  }
+
+  private void notifyListeners() {
+    Set<RecipientModifiedListener> localListeners;
+
+    synchronized (this) {
+      localListeners = new HashSet<>(listeners);
+    }
+
+    for (RecipientModifiedListener listener : localListeners)
+      listener.onModified(this);
+  }
+
+  public DcChat getChat()
+  {
+    return dcChat!=null? dcChat : new DcChat(0);
+  }
+
+  @Override
+  public String toString() {
+    return "Recipient{" +
+        "listeners=" + listeners +
+        ", address=" + address +
+        ", customLabel='" + customLabel + '\'' +
+        ", systemContactPhoto=" + systemContactPhoto +
+        ", contactUri=" + contactUri +
+        ", profileName='" + profileName + '\'' +
+        ", profileAvatar='" + profileAvatar + '\'' +
+        '}';
+  }
+}

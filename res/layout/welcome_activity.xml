@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    tools:context=".WelcomeActivity">
+
+    <androidx.legacy.widget.Space
+        android:layout_width="match_parent"
+        android:layout_height="112dp"
+        android:layout_weight="4" />
+
+    <ImageView
+        android:id="@+id/welcome_icon"
+        android:layout_width="128dp"
+        android:layout_height="128dp"
+        android:src="@drawable/intro1"
+        android:padding="8dp"
+        tools:ignore="contentDescription"/>
+
+    <TextView
+        android:id="@+id/welcome_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="16dp"
+        android:text="@string/welcome_desktop"
+        android:textSize="22sp"
+        android:textStyle="bold"/>
+
+    <TextView
+        android:id="@+id/welcome_sub_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="24dp"
+        android:text="@string/welcome_intro1_message"
+        android:textSize="18sp"/>
+
+    <Button
+        style="@style/ButtonPrimary"
+        android:id="@+id/login_button"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:text="@string/login_header" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="72dp" />
+
+    <Button
+        android:id="@+id/signup_button"
+        style="@style/ButtonPrimaryB"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/logup_header" />
+
+    <androidx.legacy.widget.Space
+        android:layout_weight="5"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"/>
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="10dp"
+        android:gravity="center_horizontal">
+
+        <TextView
+            android:id="@+id/scan_qr_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:gravity="center"
+            android:text="@string/qrscan_title"
+            android:textSize="16sp"
+            android:textColor="@color/delta_accent"/>
+
+        <TextView
+            android:id="@+id/backup_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:gravity="center"
+            android:text="@string/import_backup_title"
+            android:textSize="16sp"
+            android:textColor="@color/delta_accent"/>
+
+    </LinearLayout>
+
+</LinearLayout>
+

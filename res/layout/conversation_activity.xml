@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_height="match_parent" android:layout_width="match_parent">
+
+    <com.juttmy.chatapp.components.ScaleStableImageView
+        android:id="@+id/conversation_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        tools:ignore="ContentDescription"
+        android:scaleType="centerCrop" />
+
+    <com.juttmy.chatapp.components.InputAwareLayout
+            android:id="@+id/layout_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+    <com.juttmy.chatapp.components.camera.QuickAttachmentDrawer
+            android:id="@+id/quick_attachment_drawer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+        <LinearLayout android:id="@+id/conversation_container"
+                      android:layout_width="match_parent"
+                      android:layout_height="match_parent"
+                      android:orientation="vertical"
+                      android:paddingTop="?attr/actionBarSize"
+                      android:gravity="bottom"
+                      android:clipToPadding="false"
+                      android:clipChildren="false">
+
+            <FrameLayout android:id="@+id/fragment_content"
+                         android:layout_width="match_parent"
+                         android:layout_height="0dp"
+                         android:layout_weight="1" />
+
+            <ViewStub
+                    android:id="@+id/attachment_editor_stub"
+                    android:inflatedId="@+id/attachment_editor"
+                    android:layout="@layout/conversation_activity_attachment_editor_stub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"/>
+
+            <include layout="@layout/conversation_input_panel"/>
+
+            <ViewStub
+                android:id="@+id/emoji_drawer_stub"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inflatedId="@+id/emoji_drawer"
+                android:layout="@layout/conversation_activity_emojidrawer_stub" />
+
+        </LinearLayout>
+    </com.juttmy.chatapp.components.camera.QuickAttachmentDrawer>
+    </com.juttmy.chatapp.components.InputAwareLayout>
+</RelativeLayout>

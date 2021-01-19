@@ -1,0 +1,325 @@
+package com.juttmy.chatapp.preferences;
+
+import android.Manifest;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Bundle;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.preference.CheckBoxPreference;
+import androidx.preference.Preference;
+import android.util.Log;
+import android.view.View;
+import android.widget.EditText;
+import android.widget.Toast;
+
+import com.b44t.messenger.DcContext;
+import com.b44t.messenger.DcEventCenter;
+
+import com.juttmy.chatapp.ApplicationPreferencesActivity;
+import com.juttmy.chatapp.LogViewActivity;
+import com.juttmy.chatapp.R;
+import com.juttmy.chatapp.connect.DcHelper;
+import com.juttmy.chatapp.permissions.Permissions;
+import com.juttmy.chatapp.util.ScreenLockUtil;
+import com.juttmy.chatapp.util.Util;
+import com.juttmy.chatapp.util.views.ProgressDialog;
+
+import static android.app.Activity.RESULT_OK;
+import static android.text.InputType.TYPE_TEXT_VARIATION_URI;
+import static com.juttmy.chatapp.connect.DcHelper.CONFIG_BCC_SELF;
+import static com.juttmy.chatapp.connect.DcHelper.CONFIG_E2EE_ENABLED;
+import static com.juttmy.chatapp.connect.DcHelper.CONFIG_INBOX_WATCH;
+import static com.juttmy.chatapp.connect.DcHelper.CONFIG_MVBOX_MOVE;
+import static com.juttmy.chatapp.connect.DcHelper.CONFIG_MVBOX_WATCH;
+import static com.juttmy.chatapp.connect.DcHelper.CONFIG_SENTBOX_WATCH;
+
+
+public class AdvancedPreferenceFragment extends ListSummaryPreferenceFragment
+                                        implements DcEventCenter.DcEventDelegate
+{
+  private static final String TAG = AdvancedPreferenceFragment.class.getSimpleName();
+
+
+
+
+  CheckBoxPreference preferE2eeCheckbox;
+  CheckBoxPreference inboxWatchCheckbox;
+  CheckBoxPreference sentboxWatchCheckbox;
+  CheckBoxPreference mvboxWatchCheckbox;
+  CheckBoxPreference bccSelfCheckbox;
+  CheckBoxPreference mvboxMoveCheckbox;
+
+  @Override
+  public void onCreate(Bundle paramBundle) {
+    super.onCreate(paramBundle);
+
+    Preference sendAsm = this.findPreference("pref_send_autocrypt_setup_message");
+    sendAsm.setOnPreferenceClickListener(new SendAsmListener());
+
+    preferE2eeCheckbox = (CheckBoxPreference) this.findPreference("pref_prefer_e2ee");
+    preferE2eeCheckbox.setOnPreferenceChangeListener(new PreferE2eeListener());
+
+    inboxWatchCheckbox = (CheckBoxPreference) this.findPreference("pref_inbox_watch");
+    inboxWatchCheckbox.setOnPreferenceChangeListener((preference, newValue) ->
+      handleImapCheck(preference, newValue, CONFIG_INBOX_WATCH)
+    );
+
+    sentboxWatchCheckbox = (CheckBoxPreference) this.findPreference("pref_sentbox_watch");
+    sentboxWatchCheckbox.setOnPreferenceChangeListener((preference, newValue) ->
+      handleImapCheck(preference, newValue, CONFIG_SENTBOX_WATCH)
+    );
+
+    mvboxWatchCheckbox = (CheckBoxPreference) this.findPreference("pref_mvbox_watch");
+    mvboxWatchCheckbox.setOnPreferenceChangeListener((preference, newValue) ->
+      handleImapCheck(preference, newValue, CONFIG_MVBOX_WATCH)
+    );
+
+    bccSelfCheckbox = (CheckBoxPreference) this.findPreference("pref_bcc_self");
+    bccSelfCheckbox.setOnPreferenceChangeListener((preference, newValue) -> {
+      boolean enabled = (Boolean) newValue;
+      dcContext.setConfigInt(CONFIG_BCC_SELF, enabled? 1 : 0);
+      return true;
+    });
+
+    mvboxMoveCheckbox = (CheckBoxPreference) this.findPreference("pref_mvbox_move");
+    mvboxMoveCheckbox.setOnPreferenceChangeListener((preference, newValue) -> {
+      boolean enabled = (Boolean) newValue;
+      dcContext.setConfigInt(CONFIG_MVBOX_MOVE, enabled? 1 : 0);
+      return true;
+    });
+
+    Preference manageKeys = this.findPreference("pref_manage_keys");
+    manageKeys.setOnPreferenceClickListener(new ManageKeysListener());
+
+    Preference submitDebugLog = this.findPreference("pref_view_log");
+    submitDebugLog.setOnPreferenceClickListener(new ViewLogListener());
+
+    Preference webrtcInstance = this.findPreference("pref_webrtc_instance");
+    webrtcInstance.setOnPreferenceClickListener(new WebrtcInstanceListener());
+    updateWebrtcSummary();
+  }
+
+  private boolean handleImapCheck(Preference preference, Object newValue, String dc_config_name) {
+    final boolean newEnabled = (Boolean) newValue;
+    if(newEnabled) {
+      dcContext.stopIo();
+      dcContext.setConfigInt(dc_config_name, 1);
+      dcContext.maybeStartIo();
+      return true;
+    }
+    else {
+      new AlertDialog.Builder(getContext())
+        .setMessage(R.string.pref_imap_folder_warn_disable_defaults)
+        .setPositiveButton(R.string.ok, (dialogInterface, i) -> {
+          dcContext.stopIo();
+          dcContext.setConfigInt(dc_config_name, 0);
+          ((CheckBoxPreference)preference).setChecked(false);
+          dcContext.maybeStartIo();
+        })
+        .setNegativeButton(R.string.cancel, null)
+        .show();
+      return false;
+    }
+
+  }
+
+  @Override
+  public void onCreatePreferences(@Nullable Bundle savedInstanceState, String rootKey) {
+    addPreferencesFromResource(R.xml.preferences_advanced);
+  }
+
+  @Override
+  public void onResume() {
+    super.onResume();
+    ((ApplicationPreferencesActivity) getActivity()).getSupportActionBar().setTitle(R.string.menu_advanced);
+
+    preferE2eeCheckbox.setChecked(0!=dcContext.getConfigInt(CONFIG_E2EE_ENABLED));
+    inboxWatchCheckbox.setChecked(0!=dcContext.getConfigInt(CONFIG_INBOX_WATCH));
+    sentboxWatchCheckbox.setChecked(0!=dcContext.getConfigInt(CONFIG_SENTBOX_WATCH));
+    mvboxWatchCheckbox.setChecked(0!=dcContext.getConfigInt(CONFIG_MVBOX_WATCH));
+    bccSelfCheckbox.setChecked(0!=dcContext.getConfigInt(CONFIG_BCC_SELF));
+    mvboxMoveCheckbox.setChecked(0!=dcContext.getConfigInt(CONFIG_MVBOX_MOVE));
+  }
+
+  @Override
+  public void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+      if (resultCode == RESULT_OK && requestCode == REQUEST_CODE_CONFIRM_CREDENTIALS_KEYS) {
+          exportKeys();
+      } else {
+        Toast.makeText(getActivity(), R.string.screenlock_authentication_failed, Toast.LENGTH_SHORT).show();
+      }
+  }
+
+  public static @NonNull String getVersion(@Nullable Context context) {
+    try {
+      if (context == null) return "";
+
+      String app     = context.getString(R.string.app_name);
+      String version = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
+
+      return String.format("%s %s", app, version);
+    } catch (PackageManager.NameNotFoundException e) {
+      Log.w(TAG, e);
+      return context.getString(R.string.app_name);
+    }
+  }
+
+  private class ViewLogListener implements Preference.OnPreferenceClickListener {
+    @Override
+    public boolean onPreferenceClick(Preference preference) {
+      final Intent intent = new Intent(getActivity(), LogViewActivity.class);
+      startActivity(intent);
+      return true;
+    }
+  }
+
+  private class WebrtcInstanceListener implements Preference.OnPreferenceClickListener {
+    @Override
+    public boolean onPreferenceClick(Preference preference) {
+      View gl = View.inflate(getActivity(), R.layout.single_line_input, null);
+      EditText inputField = gl.findViewById(R.id.input_field);
+      inputField.setHint(R.string.videochat_instance_placeholder);
+      inputField.setText(dcContext.getConfig(DcHelper.CONFIG_WEBRTC_INSTANCE));
+      inputField.setSelection(inputField.getText().length());
+      inputField.setInputType(TYPE_TEXT_VARIATION_URI);
+      new AlertDialog.Builder(getActivity())
+              .setTitle(R.string.videochat_instance)
+              .setMessage(R.string.videochat_instance_explain)
+              .setView(gl)
+              .setNegativeButton(android.R.string.cancel, null)
+              .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                dcContext.setConfig(DcHelper.CONFIG_WEBRTC_INSTANCE, inputField.getText().toString());
+                updateWebrtcSummary();
+              })
+              .show();
+      return true;
+    }
+  }
+
+  private void updateWebrtcSummary() {
+    Preference webrtcInstance = this.findPreference("pref_webrtc_instance");
+    if (webrtcInstance != null) {
+      webrtcInstance.setSummary(dcContext.isWebrtcConfigOk()?
+              dcContext.getConfig(DcHelper.CONFIG_WEBRTC_INSTANCE) : getString(R.string.none));
+    }
+  }
+
+  /***********************************************************************************************
+   * Autocrypt
+   **********************************************************************************************/
+
+  private class SendAsmListener implements Preference.OnPreferenceClickListener {
+    @Override
+    public boolean onPreferenceClick(Preference preference) {
+      new AlertDialog.Builder(getActivity())
+        .setTitle(getActivity().getString(R.string.autocrypt_send_asm_title))
+        .setMessage(getActivity().getString(R.string.autocrypt_send_asm_explain_before))
+        .setNegativeButton(android.R.string.cancel, null)
+        .setPositiveButton(R.string.autocrypt_send_asm_button, (dialog, which) -> {
+
+          progressDialog = new ProgressDialog(getActivity());
+          progressDialog.setMessage(getActivity().getString(R.string.one_moment));
+          progressDialog.setCanceledOnTouchOutside(false);
+          progressDialog.setCancelable(false);
+          progressDialog.setButton(DialogInterface.BUTTON_NEGATIVE, getActivity().getString(android.R.string.cancel), (dialog1, which1) -> dcContext.stopOngoingProcess());
+          progressDialog.show();
+
+
+          new Thread(() -> {
+            final String sc = dcContext.initiateKeyTransfer();
+            Util.runOnMain(() -> {
+              if( progressDialog != null ) {
+                progressDialog.dismiss();
+                progressDialog = null;
+              }
+
+              if( sc != null ) {
+                String scFormatted = "";
+                try {
+                  scFormatted = sc.substring(0, 4) + "  -  " + sc.substring(5, 9) + "  -  " + sc.substring(10, 14) + "  -\n\n" +
+                      sc.substring(15, 19) + "  -  " + sc.substring(20, 24) + "  -  " + sc.substring(25, 29) + "  -\n\n" +
+                      sc.substring(30, 34) + "  -  " + sc.substring(35, 39) + "  -  " + sc.substring(40, 44);
+                } catch (Exception e) {
+                  e.printStackTrace();
+                }
+                new AlertDialog.Builder(getActivity())
+                  .setTitle(getActivity().getString(R.string.autocrypt_send_asm_title))
+                  .setMessage(getActivity().getString(R.string.autocrypt_send_asm_explain_after, scFormatted))
+                  .setPositiveButton(android.R.string.ok, null)
+                  .setCancelable(false) // prevent the dialog from being dismissed accidentally (when the dialog is closed, the setup code is gone forever and the user has to create a new setup message)
+                  .show();
+              }
+            });
+          }).start();
+
+
+        })
+        .show();
+      return true;
+    }
+  }
+
+  private class PreferE2eeListener implements Preference.OnPreferenceChangeListener {
+    @Override
+    public boolean onPreferenceChange(final Preference preference, Object newValue) {
+      boolean enabled = (Boolean) newValue;
+      dcContext.setConfigInt(CONFIG_E2EE_ENABLED, enabled? 1 : 0);
+      return true;
+    }
+  }
+
+  /***********************************************************************************************
+   * Key Import/Export
+   **********************************************************************************************/
+  private class ManageKeysListener implements Preference.OnPreferenceClickListener {
+    @Override
+    public boolean onPreferenceClick(Preference preference) {
+      boolean result = ScreenLockUtil.applyScreenLock(getActivity(), REQUEST_CODE_CONFIRM_CREDENTIALS_KEYS);
+      if (!result) {
+        exportKeys();
+      }
+      return true;
+    }
+  }
+
+  private void exportKeys() {
+    Permissions.with(getActivity())
+        .request(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE)
+        .ifNecessary()
+        .withPermanentDenialDialog(getString(R.string.perm_explain_access_to_storage_denied))
+        .onAllGranted(() -> {
+          new AlertDialog.Builder(getActivity())
+              .setTitle(R.string.pref_managekeys_menu_title)
+              .setItems(new CharSequence[]{
+                      getActivity().getString(R.string.pref_managekeys_export_secret_keys),
+                      getActivity().getString(R.string.pref_managekeys_import_secret_keys)
+                  },
+                  (dialogInterface, i) -> {
+                    if (i==0) {
+                      new AlertDialog.Builder(getActivity())
+                          .setTitle(R.string.pref_managekeys_export_secret_keys)
+                          .setMessage(getActivity().getString(R.string.pref_managekeys_export_explain, dcContext.getImexDir().getAbsolutePath()))
+                          .setNegativeButton(android.R.string.cancel, null)
+                          .setPositiveButton(android.R.string.ok, (dialogInterface2, i2) -> startImex(DcContext.DC_IMEX_EXPORT_SELF_KEYS))
+                          .show();
+                    }
+                    else {
+                      new AlertDialog.Builder(getActivity())
+                          .setTitle(R.string.pref_managekeys_import_secret_keys)
+                          .setMessage(getActivity().getString(R.string.pref_managekeys_import_explain, dcContext.getImexDir().getAbsolutePath()))
+                          .setNegativeButton(android.R.string.cancel, null)
+                          .setPositiveButton(android.R.string.ok, (dialogInterface2, i2) -> startImex(DcContext.DC_IMEX_IMPORT_SELF_KEYS))
+                          .show();
+                    }
+                  }
+              )
+              .show();
+        })
+        .execute();
+  }
+}
